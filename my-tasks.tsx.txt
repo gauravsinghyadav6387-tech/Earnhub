@@ -1,0 +1,140 @@
+import { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Modal } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { api } from '@/src/api';
+import { colors, spacing, radius, fontSize } from '@/src/theme';
+import { Toast } from '@/src/Toast';
+
+const TABS = ['all', 'in_progress', 'under_review', 'completed'] as const;
+const LABELS: Record<string, string> = { all: 'All', in_progress: 'In Progress', under_review: 'Under Review', completed: 'Completed', rejected: 'Rejected' };
+
+export default function MyTasks() {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [tab, setTab] = useState<typeof TABS[number]>('all');
+  const [loading, setLoading] = useState(true);
+  const [proofModal, setProofModal] = useState<any>(null);
+  const [proofNote, setProofNote] = useState('');
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setTasks(await api.get('/tasks/mine')); } catch (e) { console.log(e); }
+    setLoading(false);
+  }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const filtered = tasks.filter((t) => tab === 'all' || t.acceptance_status === tab);
+
+  const submitProof = async () => {
+    if (!proofModal) return;
+    try {
+      await api.post(`/tasks/${proofModal.id}/submit-proof`, { note: proofNote, attachments: [] });
+      setMsg('Proof submitted!');
+      setProofModal(null); setProofNote('');
+      setTimeout(() => setMsg(''), 2000);
+      load();
+    } catch (e: any) { setMsg(e.message); setTimeout(() => setMsg(''), 2000); }
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {msg ? <Toast message={msg} type={msg.includes('!') ? 'success' : 'error'} /> : null}
+      <View style={styles.header}>
+        <Text style={styles.h1}>My Tasks</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {TABS.map((t) => (
+            <Pressable key={t} style={[styles.chip, tab === t && styles.chipActive]} onPress={() => setTab(t)} testID={`mytasks-tab-${t}`}>
+              <Text style={[styles.chipText, tab === t && { color: '#fff' }]}>{LABELS[t]}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {loading ? <ActivityIndicator color={colors.brand} style={{ marginTop: 40 }} /> :
+        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 100 }}>
+          {filtered.length === 0 && <Text style={styles.empty}>No tasks here yet</Text>}
+          {filtered.map((t) => {
+            const statusColor = t.acceptance_status === 'completed' ? colors.success : t.acceptance_status === 'rejected' ? colors.error : t.acceptance_status === 'under_review' ? colors.warning : colors.info;
+            return (
+              <View key={t.acceptance_id} style={styles.card} testID={`mytask-${t.id}`}>
+                <View style={styles.cardTop}>
+                  <View style={[styles.statusPill, { backgroundColor: statusColor + '20' }]}>
+                    <Text style={[styles.statusText, { color: statusColor }]}>{LABELS[t.acceptance_status] || t.acceptance_status}</Text>
+                  </View>
+                  <Text style={styles.reward}>₹{t.budget}</Text>
+                </View>
+                <Text style={styles.title}>{t.title}</Text>
+                <Text style={styles.desc} numberOfLines={2}>{t.description}</Text>
+                <View style={styles.meta}><Ionicons name="location" size={12} color={colors.muted} /><Text style={styles.metaText}>{t.location}</Text></View>
+                {t.acceptance_status === 'in_progress' && (
+                  <Pressable style={styles.submitBtn} onPress={() => setProofModal(t)} testID={`submit-proof-${t.id}`}>
+                    <Ionicons name="cloud-upload" size={16} color="#fff" />
+                    <Text style={styles.submitText}>Submit Proof</Text>
+                  </Pressable>
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
+      }
+
+      <Modal visible={!!proofModal} transparent animationType="slide" onRequestClose={() => setProofModal(null)}>
+        <View style={styles.modalBg}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Submit Proof</Text>
+            <Text style={styles.modalSub}>{proofModal?.title}</Text>
+            <TextInput
+              style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+              placeholder="Describe your work / paste image URLs..."
+              placeholderTextColor={colors.muted}
+              value={proofNote}
+              onChangeText={setProofNote}
+              multiline
+              testID="proof-note"
+            />
+            <Text style={styles.modalNote}>Images/PDF/Video upload supported via base64 — paste a note for this demo.</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.md }}>
+              <Pressable style={[styles.modalBtn, { backgroundColor: colors.surfaceSecondary }]} onPress={() => { setProofModal(null); setProofNote(''); }}>
+                <Text style={{ color: colors.onSurface, fontWeight: '700' }}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.modalBtn, { backgroundColor: colors.brand }]} onPress={submitProof} testID="proof-submit">
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Submit</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  h1: { fontSize: fontSize.xxl, fontWeight: '800', color: colors.onSurface, marginBottom: spacing.md },
+  chip: { paddingHorizontal: spacing.md, height: 36, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  chipActive: { backgroundColor: colors.brandSecondary, borderColor: colors.brandSecondary },
+  chipText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.onSurface },
+  empty: { textAlign: 'center', color: colors.muted, marginTop: 40 },
+  card: { backgroundColor: '#fff', padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  statusPill: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill },
+  statusText: { fontSize: 11, fontWeight: '700' },
+  reward: { fontSize: fontSize.lg, fontWeight: '800', color: colors.brand },
+  title: { fontSize: fontSize.lg, fontWeight: '700', color: colors.onSurface },
+  desc: { color: colors.muted, marginTop: 4, marginBottom: spacing.sm },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: fontSize.sm, color: colors.muted },
+  submitBtn: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand, paddingVertical: 10, borderRadius: radius.md, marginTop: spacing.sm },
+  submitText: { color: '#fff', fontWeight: '700' },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modal: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, paddingBottom: spacing.xl },
+  modalTitle: { fontSize: fontSize.xl, fontWeight: '800', color: colors.onSurface },
+  modalSub: { color: colors.muted, marginBottom: spacing.md },
+  input: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, fontSize: fontSize.base, borderWidth: 1, borderColor: colors.border },
+  modalNote: { fontSize: fontSize.sm, color: colors.muted, marginTop: spacing.sm },
+  modalBtn: { flex: 1, paddingVertical: 14, borderRadius: radius.md, alignItems: 'center' },
+});

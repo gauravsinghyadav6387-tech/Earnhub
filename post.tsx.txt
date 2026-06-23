@@ -1,0 +1,94 @@
+import { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { api } from '@/src/api';
+import { colors, spacing, radius, fontSize } from '@/src/theme';
+import { Toast } from '@/src/Toast';
+
+const CATS = ['Photography', 'Product Listing', 'Data Entry', 'Marketing', 'Verification', 'Delivery', 'Survey', 'Others'];
+
+export default function PostTask() {
+  const router = useRouter();
+  const [form, setForm] = useState({ title: '', description: '', category: 'Photography', requirements: '', budget: '', deadline: '', workers_needed: '1', location: '' });
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const submit = async () => {
+    setErr(''); setMsg('');
+    if (!form.title || !form.description || !form.budget || !form.location) { setErr('Please fill required fields'); return; }
+    setLoading(true);
+    try {
+      await api.post('/tasks', { ...form, budget: parseFloat(form.budget), workers_needed: parseInt(form.workers_needed) || 1 });
+      setMsg('Task posted successfully!');
+      setForm({ title: '', description: '', category: 'Photography', requirements: '', budget: '', deadline: '', workers_needed: '1', location: '' });
+      setTimeout(() => { setMsg(''); router.push('/(tabs)/find'); }, 1500);
+    } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {msg ? <Toast message={msg} type="success" /> : null}
+      {err ? <Toast message={err} type="error" /> : null}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 100 }}>
+          <Text style={styles.h1}>Post a Task</Text>
+          <Text style={styles.sub}>Hire workers for your gig</Text>
+
+          <Text style={styles.label}>Category *</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: spacing.md }}>
+            {CATS.map((c) => (
+              <Pressable key={c} style={[styles.chip, form.category === c && styles.chipActive]} onPress={() => setForm({ ...form, category: c })} testID={`post-cat-${c}`}>
+                <Text style={[styles.chipText, form.category === c && { color: '#fff' }]}>{c}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          {[
+            { k: 'title', label: 'Task Title *', ph: 'e.g. Photoshoot for 20 products' },
+            { k: 'description', label: 'Description *', ph: 'Detailed description...', multi: true },
+            { k: 'requirements', label: 'Requirements', ph: 'Skills/tools needed', multi: true },
+            { k: 'budget', label: 'Budget (₹) *', ph: '500', kb: 'numeric' },
+            { k: 'workers_needed', label: 'Workers Needed', ph: '1', kb: 'numeric' },
+            { k: 'location', label: 'Location *', ph: 'e.g. Bandra, Mumbai' },
+            { k: 'deadline', label: 'Deadline', ph: 'e.g. 7 days' },
+          ].map((f) => (
+            <View key={f.k}>
+              <Text style={styles.label}>{f.label}</Text>
+              <TextInput
+                style={[styles.input, f.multi && { height: 80, textAlignVertical: 'top' }]}
+                placeholder={f.ph}
+                placeholderTextColor={colors.muted}
+                value={(form as any)[f.k]}
+                onChangeText={(v) => setForm({ ...form, [f.k]: v })}
+                keyboardType={(f.kb as any) || 'default'}
+                multiline={!!f.multi}
+                testID={`post-${f.k}`}
+              />
+            </View>
+          ))}
+
+          <Pressable style={[styles.cta, loading && { opacity: 0.6 }]} onPress={submit} disabled={loading} testID="post-submit">
+            <Ionicons name="paper-plane" size={20} color="#fff" />
+            <Text style={styles.ctaText}>{loading ? 'Publishing...' : 'Publish Task'}</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  h1: { fontSize: fontSize.xxl, fontWeight: '800', color: colors.onSurface },
+  sub: { fontSize: fontSize.base, color: colors.muted, marginBottom: spacing.lg },
+  label: { fontSize: fontSize.sm, fontWeight: '600', color: colors.onSurface, marginBottom: 6, marginTop: spacing.sm },
+  input: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: fontSize.base, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
+  chip: { paddingHorizontal: spacing.md, height: 36, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  chipActive: { backgroundColor: colors.brandSecondary, borderColor: colors.brandSecondary },
+  chipText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.onSurface },
+  cta: { backgroundColor: colors.brand, paddingVertical: 16, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginTop: spacing.lg },
+  ctaText: { color: '#fff', fontSize: fontSize.lg, fontWeight: '700' },
+});

@@ -1,0 +1,74 @@
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '@/src/auth';
+import { colors, spacing, radius, fontSize } from '@/src/theme';
+
+export default function Profile() {
+  const router = useRouter();
+  const { user, logout } = useAuth();
+
+  const menu = [
+    { icon: 'person', label: 'My Profile', to: '/edit-profile' },
+    { icon: 'wallet', label: 'Payouts & Transactions', to: '/transactions' },
+    { icon: 'document-text', label: 'My Documents', to: '/documents' },
+    { icon: 'gift', label: 'Refer & Earn', to: '/referral' },
+    { icon: 'trophy', label: 'Leaderboard', to: '/leaderboard' },
+    { icon: 'help-circle', label: 'Help & Support', to: '/support' },
+    { icon: 'settings', label: 'Settings', to: '/settings' },
+  ];
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+        <View style={styles.header}>
+          <View style={styles.avatar}><Ionicons name="person" size={48} color="#fff" /></View>
+          <Text style={styles.name}>{user?.full_name}</Text>
+          <View style={styles.badge}><Ionicons name="medal" size={14} color="#fff" /><Text style={styles.badgeText}>{user?.level || 'Bronze'}</Text></View>
+          <Text style={styles.email}>{user?.email}</Text>
+          <View style={styles.statRow}>
+            <View style={styles.stat}><Text style={styles.statVal}>{user?.tasks_completed || 0}</Text><Text style={styles.statLab}>Tasks</Text></View>
+            <View style={styles.stat}><Text style={styles.statVal}>{user?.rating?.toFixed(1) || '5.0'}</Text><Text style={styles.statLab}>Rating</Text></View>
+            <View style={styles.stat}><Text style={styles.statVal}>{user?.streak || 0}</Text><Text style={styles.statLab}>Streak</Text></View>
+          </View>
+        </View>
+
+        {user?.role === 'admin' && (
+          <Pressable style={[styles.menuItem, { backgroundColor: colors.brandTertiary }]} onPress={() => router.push('/admin')} testID="profile-admin">
+            <View style={styles.menuLeft}><Ionicons name="shield-checkmark" size={22} color={colors.brand} /><Text style={[styles.menuLabel, { color: colors.brand, fontWeight: '700' }]}>Admin Panel</Text></View>
+            <Ionicons name="chevron-forward" size={20} color={colors.brand} />
+          </Pressable>
+        )}
+
+        {menu.map((m) => (
+          <Pressable key={m.label} style={styles.menuItem} onPress={() => router.push(m.to as any)} testID={`profile-${m.label.toLowerCase().replace(/[^a-z]/g, '-')}`}>
+            <View style={styles.menuLeft}><Ionicons name={m.icon as any} size={22} color={colors.brandSecondary} /><Text style={styles.menuLabel}>{m.label}</Text></View>
+            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+          </Pressable>
+        ))}
+
+        <Pressable style={[styles.menuItem, { marginTop: spacing.md }]} onPress={async () => { await logout(); router.replace('/login'); }} testID="profile-logout">
+          <View style={styles.menuLeft}><Ionicons name="log-out" size={22} color={colors.error} /><Text style={[styles.menuLabel, { color: colors.error }]}>Logout</Text></View>
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  header: { alignItems: 'center', paddingVertical: spacing.xl, backgroundColor: colors.brandSecondary, marginBottom: spacing.md },
+  avatar: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff' },
+  name: { fontSize: fontSize.xl, fontWeight: '800', color: '#fff', marginTop: spacing.md },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brand, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill, marginTop: spacing.sm },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  email: { color: 'rgba(255,255,255,0.7)', marginTop: 4 },
+  statRow: { flexDirection: 'row', gap: spacing.xl, marginTop: spacing.md },
+  stat: { alignItems: 'center' },
+  statVal: { color: '#fff', fontSize: fontSize.xl, fontWeight: '800' },
+  statLab: { color: 'rgba(255,255,255,0.7)', fontSize: fontSize.sm },
+  menuItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, marginHorizontal: spacing.lg, marginBottom: 6, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary },
+  menuLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  menuLabel: { fontSize: fontSize.base, fontWeight: '600', color: colors.onSurface },
+});

@@ -1,0 +1,173 @@
+import { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '@/src/auth';
+import { api } from '@/src/api';
+import { colors, spacing, radius, fontSize } from '@/src/theme';
+
+export default function Home() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [wallet, setWallet] = useState<any>({ balance: 0, total_earned: 0, pending: 0 });
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [notifCount, setNotifCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const [w, t, n] = await Promise.all([
+        api.get('/wallet'), api.get('/tasks?sort=high_paying'), api.get('/notifications')
+      ]);
+      setWallet(w); setTasks(t.slice(0, 5));
+      setNotifCount(n.filter((x: any) => !x.read).length);
+    } catch (e) { console.log(e); }
+    finally { setLoading(false); }
+  }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}>
+        {/* Top bar */}
+        <View style={styles.topBar}>
+          <View>
+            <Text style={styles.greet}>Hello, {user?.full_name?.split(' ')[0] || 'there'}</Text>
+            <View style={styles.locRow}>
+              <Ionicons name="location" size={14} color={colors.muted} />
+              <Text style={styles.loc}>{user?.city}, {user?.state}</Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <Pressable style={styles.iconBtn} onPress={() => router.push('/notifications')} testID="home-notifications">
+              <Ionicons name="notifications" size={22} color={colors.onSurface} />
+              {notifCount > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{notifCount}</Text></View>}
+            </Pressable>
+            <Pressable style={styles.iconBtn} onPress={() => router.push('/(tabs)/profile')} testID="home-profile">
+              <Ionicons name="person" size={22} color={colors.onSurface} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Hero Wallet */}
+        <LinearGradient colors={['#0B1B6F', '#1E3A8A']} style={styles.wallet} testID="home-wallet-card">
+          <Text style={styles.walletLabel}>Earn Anytime, Anywhere</Text>
+          <Text style={styles.balance}>₹{wallet.balance?.toFixed(2) || '0.00'}</Text>
+          <Text style={styles.walletSub}>Available Balance</Text>
+          <View style={styles.walletRow}>
+            <View style={styles.walletStat}><Text style={styles.walletStatVal}>₹{wallet.total_earned?.toFixed(0) || 0}</Text><Text style={styles.walletStatLab}>Total Earned</Text></View>
+            <View style={styles.walletStat}><Text style={styles.walletStatVal}>₹{wallet.pending?.toFixed(0) || 0}</Text><Text style={styles.walletStatLab}>Pending</Text></View>
+            <Pressable style={styles.withdrawBtn} onPress={() => router.push('/withdraw')} testID="home-withdraw-btn">
+              <Ionicons name="arrow-up" size={16} color="#0B1B6F" />
+              <Text style={styles.withdrawTxt}>Withdraw</Text>
+            </Pressable>
+          </View>
+        </LinearGradient>
+
+        {/* Stats */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}><Ionicons name="checkmark-circle" size={20} color={colors.brand} /><Text style={styles.statVal}>{user?.tasks_completed || 0}</Text><Text style={styles.statLab}>Tasks</Text></View>
+          <View style={styles.statCard}><Ionicons name="star" size={20} color={colors.warning} /><Text style={styles.statVal}>{user?.rating?.toFixed(1) || '5.0'}</Text><Text style={styles.statLab}>Rating</Text></View>
+          <View style={styles.statCard}><Ionicons name="flame" size={20} color={colors.error} /><Text style={styles.statVal}>{user?.streak || 0}</Text><Text style={styles.statLab}>Streak</Text></View>
+        </View>
+
+        {/* Quick Access */}
+        <Text style={styles.sectionTitle}>Quick Access</Text>
+        <View style={styles.quickGrid}>
+          {[
+            { icon: 'search', label: 'Find Tasks', to: '/(tabs)/find', color: '#16A34A' },
+            { icon: 'clipboard', label: 'My Tasks', to: '/(tabs)/my-tasks', color: '#0B1B6F' },
+            { icon: 'wallet', label: 'Wallet', to: '/wallet', color: '#F59E0B' },
+            { icon: 'trophy', label: 'Leaderboard', to: '/leaderboard', color: '#EF4444' },
+            { icon: 'gift', label: 'Refer & Earn', to: '/referral', color: '#3B82F6' },
+            { icon: 'document', label: 'Documents', to: '/documents', color: '#8B5CF6' },
+          ].map((q) => (
+            <Pressable key={q.label} style={styles.quickCard} onPress={() => router.push(q.to as any)} testID={`quick-${q.label.toLowerCase().replace(/[^a-z]/g, '-')}`}>
+              <View style={[styles.quickIcon, { backgroundColor: q.color + '20' }]}>
+                <Ionicons name={q.icon as any} size={22} color={q.color} />
+              </View>
+              <Text style={styles.quickLabel}>{q.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Featured Tasks */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Featured Tasks</Text>
+          <Pressable onPress={() => router.push('/(tabs)/find')} testID="home-see-all"><Text style={styles.link}>See all</Text></Pressable>
+        </View>
+        {loading ? <ActivityIndicator color={colors.brand} style={{ marginVertical: 30 }} /> : tasks.map((t) => (
+          <TaskCard key={t.id} task={t} onPress={() => router.push({ pathname: '/task-detail', params: { id: t.id } })} />
+        ))}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+export function TaskCard({ task, onPress }: { task: any; onPress?: () => void }) {
+  return (
+    <Pressable style={tcs.card} onPress={onPress} testID={`task-card-${task.id}`}>
+      <View style={tcs.cardTop}>
+        <View style={[tcs.catBadge, { backgroundColor: colors.brandTertiary }]}><Text style={tcs.catText}>{task.category}</Text></View>
+        <Text style={tcs.reward}>₹{task.budget}</Text>
+      </View>
+      <Text style={tcs.title} numberOfLines={2}>{task.title}</Text>
+      <Text style={tcs.desc} numberOfLines={2}>{task.description}</Text>
+      <View style={tcs.meta}>
+        <View style={tcs.metaItem}><Ionicons name="location" size={12} color={colors.muted} /><Text style={tcs.metaText}>{task.distance_km ? `${task.distance_km} km` : 'Remote'}</Text></View>
+        <View style={tcs.metaItem}><Ionicons name="time" size={12} color={colors.muted} /><Text style={tcs.metaText}>{task.location}</Text></View>
+      </View>
+    </Pressable>
+  );
+}
+
+const tcs = StyleSheet.create({
+  card: { backgroundColor: '#fff', marginHorizontal: spacing.lg, marginBottom: spacing.md, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  catBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill },
+  catText: { fontSize: 11, fontWeight: '700', color: colors.onBrandTertiary },
+  reward: { fontSize: fontSize.xl, fontWeight: '800', color: colors.brand },
+  title: { fontSize: fontSize.lg, fontWeight: '700', color: colors.onSurface, marginBottom: 4 },
+  desc: { fontSize: fontSize.base, color: colors.muted, lineHeight: 20, marginBottom: spacing.sm },
+  meta: { flexDirection: 'row', gap: spacing.md },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: fontSize.sm, color: colors.muted },
+});
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  greet: { fontSize: fontSize.lg, fontWeight: '700', color: colors.onSurface },
+  locRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  loc: { fontSize: fontSize.sm, color: colors.muted },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  badge: { position: 'absolute', top: 4, right: 4, backgroundColor: colors.error, borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  wallet: { marginHorizontal: spacing.lg, padding: spacing.xl, borderRadius: radius.lg, marginBottom: spacing.lg },
+  walletLabel: { color: 'rgba(255,255,255,0.8)', fontSize: fontSize.sm, fontWeight: '600' },
+  balance: { fontSize: 36, fontWeight: '800', color: '#fff', marginTop: 4 },
+  walletSub: { color: 'rgba(255,255,255,0.7)', fontSize: fontSize.sm, marginBottom: spacing.lg },
+  walletRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  walletStat: { },
+  walletStatVal: { color: '#fff', fontWeight: '700', fontSize: fontSize.base },
+  walletStatLab: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
+  withdrawBtn: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff', paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.pill },
+  withdrawTxt: { color: '#0B1B6F', fontWeight: '700' },
+  statsRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
+  statCard: { flex: 1, backgroundColor: colors.surfaceSecondary, padding: spacing.md, borderRadius: radius.md, alignItems: 'center' },
+  statVal: { fontSize: fontSize.xl, fontWeight: '800', color: colors.onSurface, marginTop: 4 },
+  statLab: { fontSize: fontSize.sm, color: colors.muted },
+  sectionTitle: { fontSize: fontSize.lg, fontWeight: '700', color: colors.onSurface, marginHorizontal: spacing.lg, marginBottom: spacing.md, marginTop: spacing.sm },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
+  link: { color: colors.brand, fontWeight: '700', marginHorizontal: spacing.lg },
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, gap: spacing.sm, marginBottom: spacing.lg },
+  quickCard: { width: '31%', backgroundColor: colors.surfaceSecondary, padding: spacing.md, borderRadius: radius.md, alignItems: 'center', gap: 8 },
+  quickIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  quickLabel: { fontSize: 11, fontWeight: '600', color: colors.onSurface, textAlign: 'center' },
+});
